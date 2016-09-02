@@ -18,10 +18,15 @@ apoapsis = conn.add_stream(getattr, vessel.orbit, 'apoapsis_altitude')
 periapsis = conn.add_stream(getattr, vessel.orbit, 'periapsis_altitude')
 eccentricity = conn.add_stream(getattr, vessel.orbit, 'eccentricity')
 
-stage_2_resources = vessel.resources_in_decouple_stage(stage=2, cumulative=False)
-stage_3_resources = vessel.resources_in_decouple_stage(stage=3, cumulative=False)
-srb_fuel = conn.add_stream(stage_3_resources.amount, 'SolidFuel')
-launcher_fuel = conn.add_stream(stage_2_resources, 'LiquidFuel')
+staged_resources = array()
+staged_srb_fuel = array()
+staged_launcher_fuel = array()
+for stage in range(0, vessel.current_stage + 1) :
+	staged_resources[stage] = vessel.resources_in_decouple_stage(stage=stage, cumulative=False)
+	staged_srb_fuel[stage] = conn.add_stream(staged_resources[stage].amount, 'SolidFuel')
+	staged_launcher_fuel[stage] = conn.add_stream(staged_resources[stage].amount, 'LiquidFuel')
+
+srbs_in_first_stage = staged_srb_fuel[vessel.current_stage] == 0.0
 
 vessel.control.sas = False
 vessel.control.rcs = False
@@ -35,7 +40,7 @@ vessel.auto_pilot.engage()
 vessel.auto_pilot.target_pitch_and_heading(90,90)
 
 # ascent loop
-srbs_separated = false
+boosters_separated = false
 turn_angle = 0
 while True:
 	# grav turn
@@ -47,12 +52,17 @@ while True:
 			vessel.auto_pilot.target_pitch_and_heading(90-turn_angle, 90)
 		
 	#check srbs
-	if not srbs_separated :
-		if srb_fuel() < 0.1 :
-			vessel.control.activate_next_stage()
-			srbs_separated = True
-			print('Booster sep')
-			
+	if not boosters_separated :
+		if srbs_in_first_stage :
+			if staged_srb_fuel[vessel.current_stage]() < 0.1 :
+				vessel.control.activate_next_stage()
+				boosters_separated = True
+				print('Booster sep')
+		else :
+			if staged_launcher_fuel[vessel.current_stage]() < 0.1 :
+				vessel.control.activate_next_stage()
+				boosters_separated = True
+				print('Booster sep')
 	if apoapsis() > 0.9*target_altitude :
 		print('Approaching target apoapsis')
 		break
